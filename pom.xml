@@ -19,13 +19,11 @@
 
 	<properties>
 		<java.version>21</java.version>
-		<springdoc.version>2.5.0</springdoc.version>
-		<!-- versiones seguras forzadas -->
+		<springdoc.version>2.6.0</springdoc.version>
 		<commons.compress.version>1.27.1</commons.compress.version>
 		<commons.lang3.version>3.18.0</commons.lang3.version>
 	</properties>
 
-	<!-- Gestiona versiones para forzar transitivas seguras -->
 	<dependencyManagement>
 		<dependencies>
 			<dependency>
@@ -42,10 +40,10 @@
 	</dependencyManagement>
 
 	<dependencies>
-		<!-- Spring Boot starters -->
+		<!-- Starters -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-actuator</artifactId>
+			<artifactId>spring-boot-starter-web</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -53,18 +51,28 @@
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-security</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-validation</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-web</artifactId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
 		</dependency>
 
-		<!-- Flyway -->
+		<!-- JWT como Resource Server -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-oauth2-jose</artifactId>
+		</dependency>
+
+		<!-- Flyway/PostgreSQL -->
 		<dependency>
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-core</artifactId>
@@ -73,22 +81,37 @@
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-database-postgresql</artifactId>
 		</dependency>
-
-		<!-- PostgreSQL driver -->
 		<dependency>
 			<groupId>org.postgresql</groupId>
 			<artifactId>postgresql</artifactId>
 			<scope>runtime</scope>
 		</dependency>
 
-		<!-- Lombok (opcional) -->
+		<!-- Lombok -->
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
 			<optional>true</optional>
 		</dependency>
 
-		<!-- Tests -->
+		<!-- OpenAPI/Swagger -->
+		<dependency>
+			<groupId>org.springdoc</groupId>
+			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+			<version>${springdoc.version}</version>
+		</dependency>
+
+		<!-- Commons -->
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-compress</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-lang3</artifactId>
+		</dependency>
+
+		<!-- Test -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
@@ -99,27 +122,6 @@
 			<artifactId>spring-security-test</artifactId>
 			<scope>test</scope>
 		</dependency>
-
-		<!-- Swagger UI / OpenAPI -->
-		<dependency>
-			<groupId>org.springdoc</groupId>
-			<artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-			<version>${springdoc.version}</version>
-		</dependency>
-
-		<!-- (Explícitas también por si tu herramienta no mira dependencyManagement) -->
-		<dependency>
-			<groupId>org.apache.commons</groupId>
-			<artifactId>commons-compress</artifactId>
-			<version>${commons.compress.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.apache.commons</groupId>
-			<artifactId>commons-lang3</artifactId>
-			<version>${commons.lang3.version}</version>
-		</dependency>
-
-		<!-- Testcontainers (versiones gestionadas por Spring Boot) -->
 		<dependency>
 			<groupId>org.testcontainers</groupId>
 			<artifactId>junit-jupiter</artifactId>
@@ -134,11 +136,12 @@
 
 	<build>
 		<plugins>
-			<!-- Lombok processing -->
+			<!-- Compilador + Lombok -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
 				<configuration>
+					<release>${java.version}</release>
 					<annotationProcessorPaths>
 						<path>
 							<groupId>org.projectlombok</groupId>
@@ -148,6 +151,7 @@
 				</configuration>
 			</plugin>
 
+			<!-- Spring Boot -->
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
@@ -161,7 +165,7 @@
 				</configuration>
 			</plugin>
 
-			<!-- Enforcer: impide Java incorrecto y dependencias vulnerables -->
+			<!-- Enforcer -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-enforcer-plugin</artifactId>
@@ -182,14 +186,58 @@
 								<bannedDependencies>
 									<searchTransitive>true</searchTransitive>
 									<excludes>
-										<!-- Bloquea commons-compress vulnerables -->
 										<exclude>org.apache.commons:commons-compress:(,1.27.1)</exclude>
-										<!-- Bloquea commons-lang3 vulnerables -->
 										<exclude>org.apache.commons:commons-lang3:(,3.18.0)</exclude>
 									</excludes>
 								</bannedDependencies>
 							</rules>
 						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+
+			<!-- Javadoc -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-javadoc-plugin</artifactId>
+				<version>3.6.3</version>
+				<configuration>
+					<source>${java.version}</source>
+					<failOnError>false</failOnError>
+					<doclint>none</doclint>
+				</configuration>
+				<executions>
+					<execution>
+						<goals><goal>jar</goal></goals>
+					</execution>
+				</executions>
+			</plugin>
+
+			<!-- Sources -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-source-plugin</artifactId>
+				<version>3.3.1</version>
+				<executions>
+					<execution>
+						<goals><goal>jar</goal></goals>
+					</execution>
+				</executions>
+			</plugin>
+
+			<!-- Jacoco -->
+			<plugin>
+				<groupId>org.jacoco</groupId>
+				<artifactId>jacoco-maven-plugin</artifactId>
+				<version>0.8.12</version>
+				<executions>
+					<execution>
+						<goals><goal>prepare-agent</goal></goals>
+					</execution>
+					<execution>
+						<id>report</id>
+						<phase>verify</phase>
+						<goals><goal>report</goal></goals>
 					</execution>
 				</executions>
 			</plugin>
