@@ -54,7 +54,7 @@ public class CustomerController {
      * Respuesta (201 Created):
      * {
      *   "id": "6e0f0a62-0f5e-45e0-9a5a-7b6e2b9b1a01",
-     *   "fullName": "Harry Potter",
+     *   "name": "Harry Potter",
      *   "email": "harry@example.com"
      * }
      */
@@ -79,7 +79,7 @@ public class CustomerController {
      * Respuesta (200 OK):
      * {
      *   "id": "6e0f0a62-0f5e-45e0-9a5a-7b6e2b9b1a01",
-     *   "fullName": "Harry Potter",
+     *   "name": "Harry Potter",
      *   "email": "harry@example.com"
      * }
      */

@@ -1,0 +1,38 @@
+spring:
+  # BBDD de tests: Postgres efímero con Testcontainers vía JDBC
+  datasource:
+    url: jdbc:tc:postgresql:16:///minicorebank
+    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
+    hikari:
+      maximum-pool-size: 2
+
+  # En tests también validamos el esquema con Hibernate
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+
+  flyway:
+    enabled: true           # ejecuta migraciones antes de los tests
+
+  security:
+    user:
+      name: test
+      password: test123
+
+# En tests no levantamos un puerto fijo (evita choques si ya hay una app corriendo)
+server:
+  port: 0
+
+# Swagger/OpenAPI no hace falta en tests de integración
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+# Log
+logging:
+  level:
+    org.flywaydb: INFO
+    org.hibernate.SQL: OFF

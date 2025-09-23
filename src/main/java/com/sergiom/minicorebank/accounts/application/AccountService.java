@@ -4,40 +4,33 @@ import com.sergiom.minicorebank.accounts.domain.Account;
 import com.sergiom.minicorebank.accounts.domain.IbanGenerator;
 import com.sergiom.minicorebank.accounts.domain.exception.AccountNotFoundException;
 import com.sergiom.minicorebank.accounts.domain.exception.InvalidAmountException;
+import com.sergiom.minicorebank.accounts.api.dtos.AccountEntryResponse;
 import com.sergiom.minicorebank.accounts.api.dtos.AccountResponse;
 import com.sergiom.minicorebank.accounts.api.dtos.BalanceResponse;
 import com.sergiom.minicorebank.accounts.api.dtos.CreateAccountRequest;
 import com.sergiom.minicorebank.accounts.infrastructure.AccountRepository;
 import com.sergiom.minicorebank.customers.domain.Customer;
+import com.sergiom.minicorebank.customers.domain.exception.CustomerNotFoundException;
 import com.sergiom.minicorebank.customers.infrastructure.CustomerRepository;
 import com.sergiom.minicorebank.ledger.LedgerEntry;
 import com.sergiom.minicorebank.ledger.domain.EntryDirection;
 import com.sergiom.minicorebank.ledger.infrastructure.LedgerEntryRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.NoSuchElementException;
+import java.util.List;
 import java.util.UUID;
 
 /**
  * Servicio de negocio para cuentas bancarias.
- * <p>
- * ¿Qué es un servicio?
- * - Una clase de la "capa de aplicación" que contiene la lógica de negocio.
- * - Orquesta llamadas a repositorios y entidades.
- * - Aplica validaciones y reglas antes de guardar datos.
- * <p>
- * Reglas principales:
- * - Solo se pueden crear cuentas para clientes existentes.
- * - El saldo no se guarda en Account; se calcula a partir del ledger.
- * - Los depósitos deben tener un monto positivo y generan una entrada contable.
- * <p>
- * Notas técnicas:
- * - Marcado con @Service para que Spring lo detecte como componente.
- * - Usa @Transactional en operaciones de escritura para garantizar atomicidad.
+ * (ver comentarios existentes para detalle)
  */
 @Service
 public class AccountService {
+
+    private static final Logger log = LoggerFactory.getLogger(AccountService.class);
 
     private final AccountRepository accounts;
     private final CustomerRepository customers;
@@ -51,46 +44,20 @@ public class AccountService {
         this.ledger = ledger;
     }
 
-    /**
-     * Crea una nueva cuenta bancaria para un cliente existente.
-     * <p>
-     * Flujo:
-     * 1. Busca el cliente en la base de datos.
-     *    - Si no existe, lanzamos "no encontrado" (404) para el cliente.
-     * 2. Construye una nueva Account con:
-     *    - El cliente dueño.
-     *    - La moneda indicada.
-     *    - Un IBAN generado automáticamente (IbanGenerator).
-     * 3. Guarda la cuenta en la base de datos.
-     * 4. Devuelve un DTO con los datos visibles al exterior.
-     *
-     * @param req DTO con los datos de creación (id del cliente, moneda, etc.)
-     * @return DTO con id, iban, moneda y estado de la nueva cuenta.
-     */
+    /** Crear cuenta (ver comentarios existentes). */
     public AccountResponse create(CreateAccountRequest req) {
+        // Usamos excepción de dominio coherente con el handler global (404).
         Customer c = customers.findById(req.customerId())
-                .orElseThrow(() -> new NoSuchElementException("customer not found")); // → 404
+                .orElseThrow(() -> new CustomerNotFoundException(req.customerId()));
 
         Account a = new Account(c, IbanGenerator.newEsIban(), req.currency());
         a = accounts.save(a);
 
-        // Si prefieres evitar repetir el mapping, puedes usar AccountResponse.fromEntity(a);
         return AccountResponse.fromEntity(a);
     }
 
-    /**
-     * Consulta el saldo actual de una cuenta.
-     * <p>
-     * Nota:
-     * - El saldo no está en Account. Se calcula en tiempo real sumando todas
-     *   las entradas del ledger asociadas a esa cuenta.
-     * - Esto asegura trazabilidad contable (puedes reconstruir saldos históricos).
-     *
-     * @param accountId id de la cuenta
-     * @return DTO con el saldo en unidades menores (ej: céntimos).
-     */
+    /** Saldo actual (ver comentarios existentes). */
     public BalanceResponse balance(UUID accountId) {
-        // Si la cuenta no existe devolvemos un 404 claro (mapeado por el GlobalExceptionHandler).
         if (!accounts.existsById(accountId)) {
             throw new AccountNotFoundException(accountId);
         }
@@ -99,18 +66,7 @@ public class AccountService {
     }
 
     /**
-     * Registra un depósito en la cuenta indicada.
-     * <p>
-     * Reglas:
-     * - amountMinor debe ser > 0 (expresado en unidades menores, ej: céntimos).
-     * - La cuenta debe existir.
-     * - Se crea una entrada en el ledger con dirección CREDIT (ingreso).
-     * - Se genera un txnId único para identificar la transacción (sirve para idempotencia).
-     *
-     * @param accountId id de la cuenta
-     * @param amountMinor monto a depositar en unidades menores (ej: céntimos)
-     * @param description texto opcional (si es null se pone "deposit")
-     * @return DTO con el saldo actualizado
+     * Registra un depósito en la cuenta indicada (ver comentarios existentes).
      */
     @Transactional
     public BalanceResponse deposit(UUID accountId, long amountMinor, String description) {
@@ -129,6 +85,38 @@ public class AccountService {
         // TODO(idempotencia): añade índice único por txn_id en la tabla de ledger y/o usa existsByTxnId para evitar duplicados.
         ledger.save(e);
 
+        // Logging de auditoría (trazabilidad en demos / troubleshooting).
+        log.info("deposit applied txnId={} accountId={} amountMinor={} currency={} desc={}",
+                e.getTxnId(), accountId, amountMinor, a.getCurrency(), e.getDescription());
+
         return balance(accountId);
+    }
+
+    /**
+     * Devuelve los N últimos apuntes del ledger para una cuenta (actividad reciente).
+     * <p>
+     * Reglas:
+     * - Verificamos que la cuenta exista (404 si no).
+     * - size se limita a [1..50] para evitar respuestas excesivas (y porque el repo ya trae 50).
+     * - Orden: descendente por fecha de creación (más recientes primero).
+     *
+     * @param accountId id de la cuenta
+     * @param size número de elementos a devolver (1..50)
+     * @return lista de apuntes (DTO) más recientes
+     */
+    @Transactional(readOnly = true)
+    public List<AccountEntryResponse> recentEntries(UUID accountId, int size) {
+        if (!accounts.existsById(accountId)) {
+            throw new AccountNotFoundException(accountId);
+        }
+
+        int capped = Math.max(1, Math.min(50, size)); // clamp [1..50]
+        List<LedgerEntry> top = ledger.findTop50ByAccount_IdOrderByCreatedAtDesc(accountId);
+
+        // Si piden menos de 50, recortamos; si piden 50, devolvemos todo.
+        return top.stream()
+                .limit(capped)
+                .map(AccountEntryResponse::fromEntity)
+                .toList();
     }
 }
