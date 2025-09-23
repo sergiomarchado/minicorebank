@@ -1,6 +1,6 @@
 # MiniCoreBank API
 
-> API REST de núcleo bancario ligero (mini core) desarrollada en **Java & Spring Boot**. 
+> API REST de núcleo bancario ligero (mini core) desarrollada en **Java & Spring Boot**.
 > Gestiona **clientes** y **cuentas**, registra **movimientos** en un **libro mayor (ledger)** y calcula el saldo a partir de los asientos, con **validaciones**, **manejo uniforme de errores** y **documentación OpenAPI**.
 
 ---
@@ -18,7 +18,7 @@
 ---
 
 ## 🎬 Demo (vídeo)
-> _PENDIENTE POR GRABAR 
+> _PENDIENTE POR GRABAR
 `[➡️ Enlace al vídeo]()`
 
 ## 📸 Capturas
@@ -35,6 +35,7 @@
 | **Accounts** | `POST /api/v1/accounts` | Apertura de cuenta (cliente existente, moneda, IBAN ES simulado). |
 |  | `POST /api/v1/accounts/{id}/deposit` | Depósito (amountMinor, description). |
 |  | `GET /api/v1/accounts/{id}/balance` | Saldo calculado a partir del ledger. |
+|  | `GET /api/v1/accounts/{id}/entries?size=50` | Últimos N apuntes del ledger (máx. 50). |
 
 📚 **OpenAPI/Swagger**: `http://localhost:8080/swagger-ui.html` → (sirve `/v3/api-docs`).
 
@@ -43,6 +44,7 @@
 ## 🧱 Diseño (breve)
 - **Arquitectura por capas / DDD-lite**: `api` (controladores/DTOs) · `application` (servicios) · `domain` (entidades y reglas) · `infrastructure` (repositorios JPA).
 - **Ledger**: el saldo no se persiste en `Account`; se **deriva** sumando asientos (`LedgerEntry`) → trazabilidad y auditoría.
+- Ahora se exponen también los **movimientos recientes** (`entries`) para que clientes/front puedan mostrar extractos.
 - **Errores homogéneos**: `GlobalExceptionHandler` devuelve `{timestamp, path, status, message, details}`.
 - **Seguridad**: filtro para `/api/**` (**Basic Auth** en desarrollo). **JWT** previsto con `spring-boot-starter-oauth2-resource-server`.
 
@@ -86,7 +88,22 @@ curl -u user:PASS -H "Content-Type: application/json" -d '{"amountMinor":1000,"d
 
 # 4) Consulta de saldo
 curl -u user:PASS http://localhost:8080/api/v1/accounts/<ACCOUNT_ID>/balance
+
+# 5) Movimientos recientes (sustituye ACCOUNT_ID)
+curl -u user:PASS http://localhost:8080/api/v1/accounts/<ACCOUNT_ID>/entries?size=10
 ```
+
+---
+
+## ✅ Tests E2E
+
+- Se han añadido **tests end-to-end** con `TestRestTemplate` + **Testcontainers (Postgres 16)**.
+- El flujo probado incluye:
+  1. Alta de cliente.
+  2. Creación de cuenta.
+  3. Depósito en cuenta.
+  4. Consulta de saldo.
+  5. Consulta de movimientos recientes (`/entries`).
 
 ---
 
